@@ -39,6 +39,16 @@ ZONA_HORARIA = "America/Bogota"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AvisoAdviento/1.0)"}
 
 
+CARRITOS: dict[str, str] = {}
+
+
+def texto_aviso(nombre: str, enlace: str) -> str:
+    texto = f"¡Disponible en Trendy! {nombre}\n\nVer producto: {enlace}"
+    if enlace in CARRITOS:
+        texto += f"\n\nMETER AL CARRITO (toca aquí): {CARRITOS[enlace]}"
+    return texto
+
+
 def notificar(mensaje: str) -> None:
     print(mensaje)
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
@@ -99,13 +109,21 @@ def buscar_por_api() -> dict[str, str]:
             nombre = prod.get("productName", "")
             if not coincide(nombre):
                 continue
-            hay_stock = any(
-                s.get("commertialOffer", {}).get("AvailableQuantity", 0) > 0
-                for item in prod.get("items", [])
-                for s in item.get("sellers", [])
-            )
-            if hay_stock:
-                encontrados[prod.get("link", BASE)] = nombre
+            enlace = prod.get("link", BASE)
+            for item in prod.get("items", []):
+                vendedor = next(
+                    (v for v in item.get("sellers", [])
+                     if v.get("commertialOffer", {}).get("AvailableQuantity", 0) > 0),
+                    None,
+                )
+                if vendedor:
+                    encontrados[enlace] = nombre
+                    # Enlace que, al abrirlo, mete el producto al carrito
+                    CARRITOS[enlace] = (
+                        f"{BASE}/checkout/cart/add?sku={item.get('itemId')}"
+                        f"&qty=1&seller={vendedor.get('sellerId', '1')}&sc=1"
+                    )
+                    break
     return encontrados
 
 
@@ -155,7 +173,7 @@ def una_vez() -> None:
     try:
         for enlace, nombre in revisar().items():
             if enlace not in previos:
-                notificar(f"¡Disponible en Trendy! {nombre}\n{enlace}")
+                notificar(texto_aviso(nombre, enlace))
                 avisar_calendario("¡Calendario de adviento Trendy disponible!", f"{nombre}\n{enlace}")
                 nuevos.append(enlace)
     except requests.RequestException as e:
@@ -180,7 +198,7 @@ def main() -> None:
         try:
             for enlace, nombre in revisar().items():
                 if enlace not in ya_avisados:
-                    notificar(f"¡Disponible en Trendy! {nombre}\n{enlace}")
+                    notificar(texto_aviso(nombre, enlace))
                     avisar_calendario("¡Calendario de adviento Trendy disponible!", f"{nombre}\n{enlace}")
                     ya_avisados.add(enlace)
         except requests.RequestException as e:
