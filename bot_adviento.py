@@ -8,6 +8,7 @@ Uso:
     python bot_adviento.py
 """
 import os
+import re
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -52,15 +53,25 @@ def texto_aviso(nombre: str, enlace: str) -> str:
 def notificar(mensaje: str) -> None:
     print(mensaje)
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+        print("Telegram: faltan TELEGRAM_TOKEN o TELEGRAM_CHAT_ID (los secretos no llegaron)")
         return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            data={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje},
-            timeout=15,
-        )
-    except requests.RequestException as e:
-        print("Error enviando a Telegram:", e)
+    # TELEGRAM_CHAT_ID puede tener varios Id separados por coma: "111,222,333"
+    for chat_id in re.split(r"[,\s;]+", TELEGRAM_CHAT_ID):
+        if not chat_id:
+            continue
+        etiqueta = "..." + chat_id[-4:]  # no se imprime el Id completo
+        try:
+            r = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                data={"chat_id": chat_id, "text": mensaje},
+                timeout=15,
+            )
+            if r.ok:
+                print(f"Telegram: enviado a {etiqueta}")
+            else:
+                print(f"Telegram NO aceptó el mensaje para {etiqueta}:", r.status_code, r.text)
+        except requests.RequestException as e:
+            print(f"Error enviando a Telegram ({etiqueta}):", e)
 
 
 def avisar_calendario(titulo: str, detalle: str) -> None:
